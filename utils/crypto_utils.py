@@ -3,20 +3,20 @@ Cryptography utilities using Fernet.
 """
 import os
 import base64
+import socket  # <-- ADD THIS
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 def get_fernet_key():
     """Derive a Fernet key from hostname and machine-id."""
-    # Read machine-id
     try:
         with open('/etc/machine-id', 'r') as f:
             machine_id = f.read().strip()
     except:
         machine_id = 'default'
-    hostname = socket.gethostname()
-    salt = b'aetheric_salt'  # fixed salt
+    hostname = socket.gethostname()   # now works
+    salt = b'aetheric_salt'
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
