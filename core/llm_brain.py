@@ -16,7 +16,7 @@ class LLMBrain:
         self.api_key = os.getenv('LLM_API_KEY')
         self.base_url = os.getenv('LLM_API_URL', 'https://integrate.api.nvidia.com/v1')
         self.model = os.getenv('LLM_MODEL', 'meta/llama-3.1-70b-instruct')
-        self.timeout = 30
+        self.timeout = 120
         self.client = None
         if self.api_key:
             self.client = OpenAI(
