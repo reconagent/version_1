@@ -1,39 +1,47 @@
 """
-LLM client for strategic decisions. Fallback to rule-based if API fails.
+LLM client for strategic decisions using NVIDIA API (OpenAI-compatible).
+Fallback to rule-based if API fails.
 """
 import os
 import json
 import time
-import requests
+from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
+from utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 class LLMBrain:
     def __init__(self):
         self.api_key = os.getenv('LLM_API_KEY')
-        self.api_url = os.getenv('LLM_API_URL', 'https://api.anthropic.com/v1/messages')
-        self.model = os.getenv('LLM_MODEL', 'claude-3-haiku-20240307')
+        self.base_url = os.getenv('LLM_API_URL', 'https://integrate.api.nvidia.com/v1')
+        self.model = os.getenv('LLM_MODEL', 'meta/llama-3.1-70b-instruct')
         self.timeout = 30
+        self.client = None
+        if self.api_key:
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+            )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def query(self, prompt):
-        if not self.api_key:
+        """Send prompt to NVIDIA LLM and return raw response."""
+        if not self.client:
+            logger.warning("No LLM API key set. Falling back to offline rules.")
             return None
-        headers = {
-            'x-api-key': self.api_key,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json'
-        }
-        payload = {
-            'model': self.model,
-            'max_tokens': 1024,
-            'messages': [{'role': 'user', 'content': prompt}]
-        }
         try:
-            resp = requests.post(self.api_url, json=payload, headers=headers, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1024,
+                temperature=0.7,
+            )
+            # Return full response object (or just content)
+            return response
         except Exception as e:
-            # Fallback: return None to trigger rule-based
+            logger.error("LLM API call failed: %s", e)
             return None
 
     def parse_actions(self, response):
@@ -41,8 +49,8 @@ class LLMBrain:
         if not response:
             return None
         try:
-            # Anthropic response structure: content[0].text
-            text = response['content'][0]['text']
+            # For OpenAI-compatible response
+            text = response.choices[0].message.content
             # Find JSON block (may be wrapped in ```json)
             if '```json' in text:
                 json_str = text.split('```json')[1].split('```')[0].strip()
@@ -51,6 +59,7 @@ class LLMBrain:
             actions = json.loads(json_str)
             if isinstance(actions, list):
                 return actions
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to parse LLM response: %s", e)
             return None
         return None

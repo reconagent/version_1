@@ -7,3 +7,5 @@ python-magic==0.4.27
 requests==2.31.0
 supabase==2.0.0
 tenacity==8.2.3
+openai==1.30.0          # for NVIDIA API compatibility
+python-dotenv==1.0.0    # optional: load .env automatically
