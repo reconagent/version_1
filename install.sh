@@ -10,7 +10,7 @@ mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
 # Install dependencies
-apt-get update -y
+
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
 # Download source files

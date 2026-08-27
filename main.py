@@ -11,7 +11,8 @@ from core.daemonizer import Daemonizer
 from core.orchestrator import Orchestrator
 from core.anti_forensics import AntiForensics
 from utils.logging_utils import setup_logging
-
+from dotenv import load_dotenv
+load_dotenv()
 def main():
     parser = argparse.ArgumentParser(description="AETHERIC Agent")
     parser.add_argument('--install', action='store_true', help='Install persistence and start daemon')
