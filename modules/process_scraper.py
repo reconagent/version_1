@@ -4,6 +4,7 @@ Scrape /proc for environment variables, command lines, and memory.
 import os
 import re
 import glob
+import time 
 from typing import List, Dict
 
 class ProcessScraper:

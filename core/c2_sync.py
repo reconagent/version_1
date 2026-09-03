@@ -99,6 +99,16 @@ class C2Sync:
             self._save_cache()
 
     def get_pending_targets(self):
-        """Retrieve new targets from Supabase (to be implemented)."""
-        # For simplicity, return empty list
-        return []
+        """Retrieve new targets from Supabase."""
+        if not self.supabase_url or not self.supabase_key:
+            return []
+        try:
+            supabase: Client = create_client(self.supabase_url, self.supabase_key)
+            response = supabase.table('targets')\
+                .select('ip')\
+                .eq('status', 'pending')\
+                .execute()
+            return [item['ip'] for item in response.data]
+        except Exception as e:
+            logger.error("Failed to fetch pending targets: %s", e)
+            return []
