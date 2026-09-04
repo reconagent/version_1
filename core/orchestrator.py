@@ -110,7 +110,7 @@ class Orchestrator:
 
     def _phase_survey(self):
         """Discover local subnet and expand to /16."""
-        ip = self.net.get_local_ip()
+        ip = get_local_ip()  # use imported function, not self.net.get_local_ip()
         subnets = self.net.get_expanded_subnets(ip)
         for subnet in subnets:
             logger.info("Scanning subnet: %s", subnet)
