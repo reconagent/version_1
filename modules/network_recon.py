@@ -13,23 +13,31 @@ class NetworkRecon:
         self.nm = nmap.PortScanner()
 
     def get_local_subnet(self):
-        """Return CIDR string of local subnet."""
         ip = get_local_ip()
         subnet = get_subnet(ip)
         return subnet
 
+    def get_expanded_subnets(self, current_ip):
+        """Return a list of subnets to scan, expanding from /24 to /16."""
+        parts = current_ip.split('.')
+        subnets = []
+        # Scan /24 first
+        subnets.append(f"{parts[0]}.{parts[1]}.{parts[2]}.0/24")
+        # Then /16
+        subnets.append(f"{parts[0]}.{parts[1]}.0.0/16")
+        # Optionally /8 (uncomment if needed)
+        # subnets.append(f"{parts[0]}.0.0.0/8")
+        return subnets
+
     def ping_sweep(self, subnet):
-        """Use nmap ping sweep to discover live hosts."""
         try:
             self.nm.scan(hosts=subnet, arguments='-sn -T4')
             hosts = list(self.nm.all_hosts())
             return hosts
         except Exception:
-            # fallback to arp-scan if available
             return self._arp_scan(subnet)
 
     def _arp_scan(self, subnet):
-        """Use arp-scan (if installed)."""
         try:
             output = subprocess.check_output(['arp-scan', '--localnet'], timeout=10).decode()
             ips = re.findall(r'(\d+\.\d+\.\d+\.\d+)', output)
@@ -38,7 +46,6 @@ class NetworkRecon:
             return []
 
     def quick_scan(self, ip):
-        """Quick nmap scan for common ports."""
         try:
             self.nm.scan(ip, arguments='-sS -T4 -p 22,23,80,443,445,3306,3389,8080')
             ports = []
@@ -52,7 +59,6 @@ class NetworkRecon:
             return []
 
     def service_scan(self, ip, ports):
-        """Get service/version info for given ports."""
         port_str = ','.join(map(str, ports))
         try:
             self.nm.scan(ip, arguments=f'-sV -p {port_str}')

