@@ -75,4 +75,10 @@ def main():
         orch.run()
 
 if __name__ == '__main__':
-    main()
+	try:
+        	main()
+	except Exception:
+        	import traceback
+        	with open('/tmp/aetheric_crash.log', 'w') as f:
+            		traceback.print_exc(file=f)
+        	raise

@@ -1,0 +1,8 @@
+root
+admin
+user
+kmit
+ubuntu
+tele
+ngit
+kmec
